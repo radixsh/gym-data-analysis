@@ -56,29 +56,38 @@ from pprint import pprint
  ('room_master_table',)]
 '''
 
+def dict_factory(cursor, row):
+    # https://docs.python.org/3/library/sqlite3.html#sqlite3-howto-row-factory
+    fields = [column[0] for column in cursor.description]
+    return {key: value for key, value in zip(fields, row)}
+
 # Goal: graph change of energy (reps x weight) over time for each exercise
 def main():
     try:
         # https://docs.python.org/3/library/sqlite3.html#tutorial
         con = sqlite3.connect(sys.argv[1])
-        cur = con.cursor()
+        con.row_factory = dict_factory
     except:
         print('Usage: ./gym.py gymroutines.db')
         sys.exit(0)
     
     exercise_name = 'bench press'
-    res = cur.execute(f"SELECT * FROM exercise_table WHERE name == '{exercise_name}'")
-    exercise_id = list(res.fetchone())[-1]
+    res = con.execute(f"SELECT * FROM exercise_table WHERE name == '{exercise_name}'")
+    exercise_id = res.fetchone()['exerciseId']
 
     table = 'workout_set_group_table'
     # Get headers with PRAGMA table_info({table name})
     # https://stackoverflow.com/questions/947215/how-to-get-a-list-of-column-names-on-sqlite3-database
-    res = cur.execute(f'PRAGMA table_info({table})')
-    pprint(res.fetchall())
+    for row in con.execute(f'PRAGMA table_info({table})'):
+        print(row)
 
     # Find data pertaining to 'exercise_name' across all workouts
-    res = cur.execute(f"SELECT * FROM {table} WHERE exerciseId == '{exercise_id}'")
-    pprint(res.fetchall())
+    count = 0
+    for row in con.execute(f"SELECT * FROM {table}"):
+        count += 1
+        if count >= 10:
+            break
+        pprint(row)
     
     # Graph that data 
 
