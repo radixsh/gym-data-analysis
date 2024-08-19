@@ -3,8 +3,9 @@ import sqlite3
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from datetime import datetime
+import math
 
-def graph_data(data, exercise_name):
+def graph_colors(data, exercise_name):
     plt.xlabel('Timestamp')
     plt.ylabel('Weight')
 
@@ -18,7 +19,21 @@ def graph_data(data, exercise_name):
     plt.scatter(timespan, weights, c=norm(reps))
 
     plt.title(exercise_name.title())
-    plt.savefig(f'{exercise_name}.png')
+    plt.savefig(f'images/{exercise_name}.png')
+    plt.show()
+
+def graph_force(data, exercise_name):
+    plt.xlabel('Timestamp')
+    plt.ylabel('Force (weight x reps)')
+
+    timespan = [x[0] for x in data]
+    force = [x[1] * math.log(x[2]) for x in data]
+
+    plt.scatter(timespan, force)
+
+    name = f'{exercise_name} (force)'
+    plt.title(name.title())
+    plt.savefig(f'images/{name}.png')
     plt.show()
 
 def show_all_tables(conn):
@@ -89,10 +104,16 @@ def main():
     # For debugging
     # show_all_tables(conn)
 
-    exercise_name = 'deadlifts'
-    data = find_exercise_data(exercise_name, conn)
+    exercises = ['bench press', 'deadlifts', 'barbell squat']
+    for exercise_name in exercises:
+        data = find_exercise_data(exercise_name, conn)
+        
+        # Graph weight
+        graph_colors(data, exercise_name)
 
-    graph_data(data, exercise_name)
+        # Graph force (reps x weight)
+        graph_force(data, exercise_name)
+    
 
 if __name__ == "__main__":
     main()
