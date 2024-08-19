@@ -1,2 +1,4 @@
 *.db
 .venv
+images/
+.DS_Store
