@@ -1,55 +1,9 @@
 import sys
 import sqlite3
+import matplotlib as mpl 
 import matplotlib.pyplot as plt
 from pprint import pprint
-
-'''
-[('android_metadata',),
- ('exercise_table',),
-        [(0, 'name', 'TEXT', 1, None, 0),
-         (1, 'notes', 'TEXT', 1, "''", 0),
-         (2, 'logReps', 'INTEGER', 1, None, 0),
-         (3, 'logWeight', 'INTEGER', 1, None, 0),
-         (4, 'logTime', 'INTEGER', 1, None, 0),
-         (5, 'logDistance', 'INTEGER', 1, None, 0),
-         (6, 'hidden', 'INTEGER', 1, None, 0),
-         (7, 'exerciseId', 'INTEGER', 1, None, 1)]
- ('sqlite_sequence',),
- ('routine_table',),
-        [(0, 'name', 'TEXT', 1, None, 0),
-         (1, 'hidden', 'INTEGER', 1, None, 0),
-         (2, 'routineId', 'INTEGER', 1, None, 1)]
- ('workout_table',),            # General log of all workouts (+ duration)
-        [(0, 'routineId', 'INTEGER', 1, None, 0),
-         (1, 'startTime', 'INTEGER', 1, None, 0),
-         (2, 'endTime', 'INTEGER', 1, None, 0),
-         (3, 'workoutId', 'INTEGER', 1, None, 1)]
- ('routine_set_table',),
-        [(0, 'groupId', 'INTEGER', 1, None, 0),
-         (1, 'reps', 'INTEGER', 0, None, 0),
-         (2, 'weight', 'REAL', 0, None, 0),
-         (3, 'time', 'INTEGER', 0, None, 0),
-         (4, 'distance', 'REAL', 0, None, 0),
-         (5, 'routineSetId', 'INTEGER', 1, None, 1)]
- ('routine_set_group_table',),
-        [(0, 'routineId', 'INTEGER', 1, None, 0),
-         (1, 'exerciseId', 'INTEGER', 1, None, 0),
-         (2, 'position', 'INTEGER', 1, None, 0),
-         (3, 'id', 'INTEGER', 1, None, 1)]
- ('workout_set_table',),
-        [(0, 'groupId', 'INTEGER', 1, None, 0),
-         (1, 'reps', 'INTEGER', 0, None, 0),
-         (2, 'weight', 'REAL', 0, None, 0),
-         (3, 'time', 'INTEGER', 0, None, 0),
-         (4, 'distance', 'REAL', 0, None, 0),
-         (5, 'complete', 'INTEGER', 1, None, 0),
- ('workout_set_group_table',),
-        [(0, 'routineId', 'INTEGER', 1, None, 0),
-         (1, 'exerciseId', 'INTEGER', 1, None, 0),
-         (2, 'position', 'INTEGER', 1, None, 0),
-         (3, 'id', 'INTEGER', 1, None, 1)]
- ('room_master_table',)]
-'''
+from datetime import datetime
 
 def dict_factory(cursor, row):
     # https://stackoverflow.com/questions/3300464/how-can-i-get-dict-from-sqlite-query
@@ -72,9 +26,10 @@ def main():
     exercise_id = res.fetchone()['exerciseId']
 
     tables = [#'exercise_table', 
-              'workout_table',
-              'routine_set_table', 'routine_set_group_table',
-              'workout_set_table', 'workout_set_group_table']
+              #'workout_table',
+              #'routine_set_table', 'routine_set_group_table',
+              #'workout_set_table', 'workout_set_group_table'
+              ]
     for table in tables:
         print(table)
         count = 0
@@ -87,6 +42,7 @@ def main():
 
     print('\n')
 
+
     # Find data pertaining to 'exercise_name' across all workouts
     ids = []
     print(f'Seeking bench_press (ID={exercise_id}) data in workout_set_group_table')
@@ -96,7 +52,7 @@ def main():
             pprint(row)
     print(f'ids: {ids}')
 
-    force = []
+    data = []
     print('\nworkout_set_table')
     index = 0
     for row in con.execute(f"SELECT * FROM workout_set_table"):
@@ -111,46 +67,39 @@ def main():
         j = 1       # Account for index incrementing at start of 'for' loop
         for row in con.execute(f"SELECT * FROM routine_set_table"):
             if j == index:
-                # print(f'index = {index}, j = {j}')
                 group_id = row['groupId']
                 print(f'routine_set_table row: {row}')
                 break
             j += 1
-        # print(f'Group ID: {group_id}')
         
         cmd = f"SELECT * FROM routine_set_group_table WHERE id == '{group_id}'"
         workout_id = con.execute(cmd).fetchone()['routineId']
-        # for row in con.execute(cmd):
-        #     print(f'routine_set_group_table row: {row}')
-        #     workout_id = row['routineId']
-        # for row in con.execute(f"SELECT * FROM routine_set_group_table"):
-        #     if row['id'] == group_id:
-        #         workout_id = row['workoutId']
         
         cmd = f"SELECT * FROM workout_table WHERE routineId == '{workout_id}'"
         timestamp = con.execute(cmd).fetchone()['startTime']
-        # for row in con.execute(cmd):
-        #     print(f'Timestamp entry: {row}')
-        #     timestamp = row['startTime']
 
-        force.append((row['reps'], row['weight'], timestamp))
+        # Append a tuple to our data 
+        data.append((datetime.fromtimestamp(timestamp / 1e3), row['weight'], row['reps']))
         print()
 
-    print(f'force: {force}')
+    print(f'data: {data}')
 
+    # Graph our data 
+    plt.xlabel('Timestamp')
+    plt.ylabel('Weight')
 
-    # Graph that data 
-    '''
-    timespan = [x for x in range
-    plt.scatter(timespan, c, color="orange", label="Weight")
+    # https://stackoverflow.com/questions/3682748/converting-unix-timestamp-string-to-readable-date
+    # timespan = [datetime.fromtimestamp(x[0] / 1e3) for x in data]
+    timespan = [x[0] for x in data]
+    weights = [x[1] for x in data]
+    reps = [x[2] for x in data]
+    norm = mpl.colors.Normalize(vmin=-1, vmax=1, clip=False)
+    plt.scatter(timespan, weights, label="alsdkfj", c=norm(reps))
+    # plt.plot(timespan, weights)
 
-    plt.xlabel('Samples taken')
-    plt.ylabel('Total number of species observed')
-
-    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    plt.savefig("succulents.png", bbox_inches="tight")
+    # plt.legend(bbox_to_anchor=(1,1), loc="upper right")
+    plt.savefig("bench_press.png")#, bbox_inches="tight")
     plt.show()
-    '''
 
 
 if __name__ == "__main__":
