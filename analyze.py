@@ -19,7 +19,7 @@ from pprint import pprint
         [(0, 'name', 'TEXT', 1, None, 0),
          (1, 'hidden', 'INTEGER', 1, None, 0),
          (2, 'routineId', 'INTEGER', 1, None, 1)]
- ('workout_table',),
+ ('workout_table',),            # General log of all workouts (+ duration)
         [(0, 'routineId', 'INTEGER', 1, None, 0),
          (1, 'startTime', 'INTEGER', 1, None, 0),
          (2, 'endTime', 'INTEGER', 1, None, 0),
@@ -31,13 +31,11 @@ from pprint import pprint
          (3, 'time', 'INTEGER', 0, None, 0),
          (4, 'distance', 'REAL', 0, None, 0),
          (5, 'routineSetId', 'INTEGER', 1, None, 1)]
- ('index_routine_set_table_groupId',),
  ('routine_set_group_table',),
         [(0, 'routineId', 'INTEGER', 1, None, 0),
          (1, 'exerciseId', 'INTEGER', 1, None, 0),
          (2, 'position', 'INTEGER', 1, None, 0),
          (3, 'id', 'INTEGER', 1, None, 1)]
- ('index_routine_set_group_table_routineId',),
  ('workout_set_table',),
         [(0, 'groupId', 'INTEGER', 1, None, 0),
          (1, 'reps', 'INTEGER', 0, None, 0),
@@ -45,18 +43,16 @@ from pprint import pprint
          (3, 'time', 'INTEGER', 0, None, 0),
          (4, 'distance', 'REAL', 0, None, 0),
          (5, 'complete', 'INTEGER', 1, None, 0),
-         (6, 'workoutSetId', 'INTEGER', 1, None, 1)]
- ('index_workout_set_table_groupId',),
  ('workout_set_group_table',),
         [(0, 'routineId', 'INTEGER', 1, None, 0),
          (1, 'exerciseId', 'INTEGER', 1, None, 0),
          (2, 'position', 'INTEGER', 1, None, 0),
          (3, 'id', 'INTEGER', 1, None, 1)]
- ('index_workout_set_group_table_workoutId',),
  ('room_master_table',)]
 '''
 
 def dict_factory(cursor, row):
+    # https://stackoverflow.com/questions/3300464/how-can-i-get-dict-from-sqlite-query
     # https://docs.python.org/3/library/sqlite3.html#sqlite3-howto-row-factory
     fields = [column[0] for column in cursor.description]
     return {key: value for key, value in zip(fields, row)}
@@ -68,28 +64,94 @@ def main():
         con = sqlite3.connect(sys.argv[1])
         con.row_factory = dict_factory
     except:
-        print('Usage: ./gym.py gymroutines.db')
+        print('Usage: ./analyze.py gymroutines.db')
         sys.exit(0)
     
     exercise_name = 'bench press'
     res = con.execute(f"SELECT * FROM exercise_table WHERE name == '{exercise_name}'")
     exercise_id = res.fetchone()['exerciseId']
 
-    table = 'workout_set_group_table'
-    # Get headers with PRAGMA table_info({table name})
-    # https://stackoverflow.com/questions/947215/how-to-get-a-list-of-column-names-on-sqlite3-database
-    for row in con.execute(f'PRAGMA table_info({table})'):
-        print(row)
+    tables = [#'exercise_table', 
+              'workout_table',
+              'routine_set_table', 'routine_set_group_table',
+              'workout_set_table', 'workout_set_group_table']
+    for table in tables:
+        print(table)
+        count = 0
+        for row in con.execute(f"SELECT * FROM {table}"):
+            count += 1
+            if count >= 10:
+                break
+            print(row)
+        print()
+
+    print('\n')
 
     # Find data pertaining to 'exercise_name' across all workouts
-    count = 0
-    for row in con.execute(f"SELECT * FROM {table}"):
-        count += 1
-        if count >= 10:
-            break
-        pprint(row)
-    
+    ids = []
+    print(f'Seeking bench_press (ID={exercise_id}) data in workout_set_group_table')
+    for row in con.execute(f"SELECT * FROM workout_set_group_table"):
+        if row['exerciseId'] == exercise_id:
+            ids.append(row['id'])
+            pprint(row)
+    print(f'ids: {ids}')
+
+    force = []
+    print('\nworkout_set_table')
+    index = 0
+    for row in con.execute(f"SELECT * FROM workout_set_table"):
+        index += 1
+        
+        # groupId identifies a unique combination of workout ID and exercise ID
+        if not (row['groupId'] in ids and row['complete']):
+            continue 
+        print(f'workout_set_table row: {row}')
+
+        # Find timestamp
+        j = 1       # Account for index incrementing at start of 'for' loop
+        for row in con.execute(f"SELECT * FROM routine_set_table"):
+            if j == index:
+                # print(f'index = {index}, j = {j}')
+                group_id = row['groupId']
+                print(f'routine_set_table row: {row}')
+                break
+            j += 1
+        # print(f'Group ID: {group_id}')
+        
+        cmd = f"SELECT * FROM routine_set_group_table WHERE id == '{group_id}'"
+        workout_id = con.execute(cmd).fetchone()['routineId']
+        # for row in con.execute(cmd):
+        #     print(f'routine_set_group_table row: {row}')
+        #     workout_id = row['routineId']
+        # for row in con.execute(f"SELECT * FROM routine_set_group_table"):
+        #     if row['id'] == group_id:
+        #         workout_id = row['workoutId']
+        
+        cmd = f"SELECT * FROM workout_table WHERE routineId == '{workout_id}'"
+        timestamp = con.execute(cmd).fetchone()['startTime']
+        # for row in con.execute(cmd):
+        #     print(f'Timestamp entry: {row}')
+        #     timestamp = row['startTime']
+
+        force.append((row['reps'], row['weight'], timestamp))
+        print()
+
+    print(f'force: {force}')
+
+
     # Graph that data 
+    '''
+    timespan = [x for x in range
+    plt.scatter(timespan, c, color="orange", label="Weight")
+
+    plt.xlabel('Samples taken')
+    plt.ylabel('Total number of species observed')
+
+    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    plt.savefig("succulents.png", bbox_inches="tight")
+    plt.show()
+    '''
+
 
 if __name__ == "__main__":
     main()
