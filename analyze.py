@@ -1,14 +1,10 @@
 import sys
 import sqlite3
-import matplotlib as mpl 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-from pprint import pprint
 from datetime import datetime
 
-def graph_data(data, output):
-    # print('Data to be graphed:')
-    # pprint(data)
-
+def graph_data(data, exercise_name):
     plt.xlabel('Timestamp')
     plt.ylabel('Weight')
 
@@ -19,14 +15,15 @@ def graph_data(data, output):
     reps = [x[2] for x in data]
     norm = mpl.colors.Normalize(vmin=0, vmax=1, clip=False)
 
-    plt.scatter(timespan, weights, c=norm(reps))    #label="Bench press", c=norm(reps))
+    plt.scatter(timespan, weights, c=norm(reps))
 
-    # plt.legend()#bbox_to_anchor=(1,1), loc="upper right")
-    plt.savefig(output)#, bbox_inches="tight")
+    plt.title(exercise_name.title())
+    plt.savefig(f'{exercise_name}.png')
     plt.show()
 
 def show_all_tables(conn):
-    tables = [#'exercise_table', 
+    LIMIT = 10
+    tables = [#'exercise_table',
               'workout_table',
               'routine_set_table', 'routine_set_group_table',
               'workout_set_table', 'workout_set_group_table'
@@ -36,40 +33,40 @@ def show_all_tables(conn):
         count = 0
         for row in conn.execute(f"SELECT * FROM {table}"):
             count += 1
-            if count >= 10:
+            if count >= LIMIT:
                 break
             print(row)
         print()
     print('\n')
 
 def find_exercise_data(exercise_name, conn):
-    res = conn.execute(f"SELECT * FROM exercise_table WHERE name == '{exercise_name}'")
-    exercise_id = res.fetchone()['exerciseId']
+    query = f"SELECT * FROM exercise_table WHERE name == '{exercise_name}'"
+    result = conn.execute(query).fetchone()
+    if result is None:
+        print("Error: no such exercise found")
+        sys.exit(0)
+    exercise_id = result['exerciseId']
 
-    print(f'Seeking bench_press (ID={exercise_id}) data in workout_table')
     data = []
     for row in conn.execute(f"SELECT * FROM workout_table"):
+        # Original timestamp int is in milliseconds
         timestamp = datetime.fromtimestamp(row['startTime'] / 1e3)
+
         workout_id = row['workoutId']
 
-        ids = []
         query = f"SELECT * FROM workout_set_group_table \
                 WHERE workoutId == {workout_id} \
                 AND exerciseId == {exercise_id}"
         result = conn.execute(query).fetchone()
-        if result is not None: 
-            print(result)
-            ids.append(result['id'])
-        # for row in conn.execute(f"SELECT * FROM workout_set_group_table"):
-        #     if row['workoutId'] == workout_id \
-        #             and row['exerciseId'] == exercise_id:
-        #         print(row)
-        #         ids.append(row['id'])
+        if result is None:
+            continue
+        print(f'{timestamp.date()}: {result}')
+        to_seek = result['id']
 
-        for row in conn.execute(f"SELECT * FROM workout_set_table"):
-            if row['groupId'] in ids:
-                print(row)
-                data.append((timestamp, row['weight'], row['reps']))
+        query = f"SELECT * FROM workout_set_table WHERE groupId == '{to_seek}'"
+        for row in conn.execute(query):
+            print(row)
+            data.append((timestamp, row['weight'], row['reps']))
 
     return data
 
@@ -88,13 +85,14 @@ def main():
     except:
         print('Usage: ./analyze.py gymroutines.db')
         sys.exit(0)
-    
-    show_all_tables(conn)
 
-    # Find data pertaining to 'exercise_name' across all workouts
-    data = find_exercise_data('barbell squat', conn)
+    # For debugging
+    # show_all_tables(conn)
 
-    graph_data(data, 'output.png')
+    exercise_name = 'deadlifts'
+    data = find_exercise_data(exercise_name, conn)
+
+    graph_data(data, exercise_name)
 
 if __name__ == "__main__":
     main()
