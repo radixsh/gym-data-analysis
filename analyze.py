@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 from pprint import pprint
 from datetime import datetime
 
-def graph_data(data):
-    print('Data to be graphed:')
-    pprint(data)
+def graph_data(data, output):
+    # print('Data to be graphed:')
+    # pprint(data)
 
     plt.xlabel('Timestamp')
     plt.ylabel('Weight')
@@ -22,7 +22,7 @@ def graph_data(data):
     plt.scatter(timespan, weights, c=norm(reps))    #label="Bench press", c=norm(reps))
 
     # plt.legend()#bbox_to_anchor=(1,1), loc="upper right")
-    plt.savefig("bench_press.png")#, bbox_inches="tight")
+    plt.savefig(output)#, bbox_inches="tight")
     plt.show()
 
 def show_all_tables(conn):
@@ -46,44 +46,30 @@ def find_exercise_data(exercise_name, conn):
     res = conn.execute(f"SELECT * FROM exercise_table WHERE name == '{exercise_name}'")
     exercise_id = res.fetchone()['exerciseId']
 
-    ids = []
-    print(f'Seeking bench_press (ID={exercise_id}) data in workout_set_group_table')
-    for row in conn.execute(f"SELECT * FROM workout_set_group_table"):
-        if row['exerciseId'] == exercise_id:
-            ids.append(row['id'])
-            pprint(row)
-    print(f'ids: {ids}')
-
+    print(f'Seeking bench_press (ID={exercise_id}) data in workout_table')
     data = []
-    print('\nworkout_set_table')
-    index = 0
-    for row in conn.execute(f"SELECT * FROM workout_set_table"):
-        index += 1
-        
-        # groupId identifies a unique combination of workout ID and exercise ID
-        if not (row['groupId'] in ids and row['complete']):
-            continue 
-        print(f'workout_set_table row: {row}')
+    for row in conn.execute(f"SELECT * FROM workout_table"):
+        timestamp = datetime.fromtimestamp(row['startTime'] / 1e3)
+        workout_id = row['workoutId']
 
-        # Find timestamp
-        j = 1       # Account for index incrementing at start of 'for' loop
-        for row in conn.execute(f"SELECT * FROM routine_set_table"):
-            if j == index:
-                group_id = row['groupId']
-                print(f'routine_set_table row: {row}')
-                break
-            j += 1
+        ids = []
+        query = f"SELECT * FROM workout_set_group_table \
+                WHERE workoutId == {workout_id} \
+                AND exerciseId == {exercise_id}"
+        result = conn.execute(query).fetchone()
+        if result is not None: 
+            print(result)
+            ids.append(result['id'])
+        # for row in conn.execute(f"SELECT * FROM workout_set_group_table"):
+        #     if row['workoutId'] == workout_id \
+        #             and row['exerciseId'] == exercise_id:
+        #         print(row)
+        #         ids.append(row['id'])
 
-        cmd = f"SELECT * FROM routine_set_group_table WHERE id == '{group_id}'"
-        workout_id = conn.execute(cmd).fetchone()['routineId']
-        
-        cmd = f"SELECT * FROM workout_table WHERE routineId == '{workout_id}'"
-        timestamp = conn.execute(cmd).fetchone()['startTime']
-        
-        # https://stackoverflow.com/questions/3682748/converting-unix-timestamp-string-to-readable-date
-        timestamp = datetime.fromtimestamp(timestamp / 1e3)
-
-        data.append((timestamp, row['weight'], row['reps']))
+        for row in conn.execute(f"SELECT * FROM workout_set_table"):
+            if row['groupId'] in ids:
+                print(row)
+                data.append((timestamp, row['weight'], row['reps']))
 
     return data
 
@@ -106,9 +92,9 @@ def main():
     show_all_tables(conn)
 
     # Find data pertaining to 'exercise_name' across all workouts
-    data = find_exercise_data('bench press', conn)
+    data = find_exercise_data('barbell squat', conn)
 
-    graph_data(data)
+    graph_data(data, 'output.png')
 
 if __name__ == "__main__":
     main()
